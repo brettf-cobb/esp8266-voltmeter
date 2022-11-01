@@ -1,9 +1,9 @@
 /*
   Brett Fernandes, based on
    
-   https://RandomNerdTutorials.com/esp8266-nodemcu-mqtt-publish-bme680-arduino/
+      https://RandomNerdTutorials.com/esp8266-nodemcu-mqtt-publish-bme680-arduino/
   AND 
-   https://www.engineersgarage.com/nodemcu-battery-voltage-monitor/
+      https://www.engineersgarage.com/nodemcu-battery-voltage-monitor/
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files.
@@ -17,13 +17,13 @@
 #include <AsyncMqttClient.h>
 #include <Wire.h>
 #include <SPI.h>
-#include <arduino_secrets.h>
+
+#include "arduino_secrets.h"
 // Define these in arduino_secrets.h:
 // #define WIFI_SSID
 // #define WIFI_PASSWORD
 // #define MQTT_USER
 // #define MQTT_PASS
-
 
 // Raspberry Pi Mosquitto MQTT Broker
 #define MQTT_HOST IPAddress(192, 168, 68, 102)
@@ -45,7 +45,7 @@ float currentVoltage = 0;
 
 const long interval = 5000;        // Interval at which to publish sensor readings
 
-void getVoltageReadings(){
+void getVoltageReadings() {
   float Vvalue=0.0;
   float voltageForIteration = 0;
   /////////////////////////////////////Battery Voltage//////////////////////////////////  
