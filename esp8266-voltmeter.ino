@@ -44,17 +44,33 @@ float voltReadingTotal = 0; // Stores the voltReadingTotal for use in average ca
 float currentVoltage = 0;
 
 const long interval = 5000;        // Interval at which to publish sensor readings
+const int voltageReadingsPerLoop = 20;
 
 void getVoltageReadings() {
-  float Vvalue=0.0;
+  float rawValue=0.0;
   float voltageForIteration = 0;
+  float rawVoltageReadings[20] = {};
   /////////////////////////////////////Battery Voltage//////////////////////////////////  
-  for(unsigned int i=0;i<20;i++){
-    Vvalue=Vvalue+analogRead(A0);         //Read analog Voltage
-    delay(5);                             //ADC stable
+  for(unsigned int i=0;i<voltageReadingsPerLoop;i++){
+    rawVoltageReadings[i] = analogRead(A0);         //Read analog Voltage
+    delay(5);                                       //ADC stable
+  }
+
+  // Sort Ascending
+  quickSort(rawVoltageReadings, 0, voltageReadingsPerLoop - 1);
+
+  unsigned int valueCount = 0;
+  // split readings into n chuncks and use innermost chunck values for calculation
+  unsigned int chunkSize = voltageReadingsPerLoop/5;
+  for (unsigned int i=(chunkSize * 3) - 1; i < (chunkSize*4)-1; i++) {
+    rawValue=rawValue + rawVoltageReadings[i];
+    valueCount=valueCount+1;
   }
   
-  voltageForIteration=(float)Vvalue/20.0;
+  voltageForIteration=(float)rawValue/valueCount;
+  Serial.println("voltageForIteration before calculation");
+  Serial.println(voltageForIteration);
+
   voltageForIteration=(float)voltageForIteration/1024 * 3.300;
   float factor = 5.042;
   if (voltageForIteration < 2.25) {
@@ -64,6 +80,37 @@ void getVoltageReadings() {
   voltReadingCount = voltReadingCount + 1;
   voltReadingTotal = voltReadingTotal + (float)(voltageForIteration * factor);
   currentVoltage = voltReadingTotal / voltReadingCount;
+  Serial.println(currentVoltage);
+
+}
+
+void quickSort(float output[], int lowerIndex, int higherIndex) {
+ int i = lowerIndex;
+ int j = higherIndex;
+ int pivot = output[lowerIndex + (higherIndex - lowerIndex) / 2];
+ while (i <= j) {
+   while (output[i] < pivot) {
+     i++;
+   }
+   while (output[j] > pivot) {
+     j--;
+   }
+   if (i <= j) {
+     exchangeNumbers(output, i, j);
+     i++;
+     j--;
+   }
+ }
+ if (lowerIndex < j)
+   quickSort(output, lowerIndex, j);
+ if (i < higherIndex)
+   quickSort(output, i, higherIndex);
+}
+
+void exchangeNumbers(float output[], int i, int j) {
+ int temp = output[i];
+ output[i] = output[j];
+ output[j] = temp;
 }
 
 void connectToWifi() {
@@ -127,8 +174,9 @@ void loop() {
   unsigned long currentMillis = millis();
 
   // We read the voltage every 500ms of the publish period to get a nice average
-  if (currentMillis - previousMillis >= 500) {
+  if (currentMillis - previousVoltMillis >= 500) {
     getVoltageReadings();
+    previousVoltMillis = currentMillis;
   }
   
   // Every X number of seconds (interval = 10 seconds) 
@@ -137,8 +185,6 @@ void loop() {
     // Save the last time a new reading was published
     previousMillis = currentMillis;
 
-    // get the latest readings of voltage integrated into the average
-    getVoltageReadings();
     // reset the counters for the next iteration of voltage readings until publish
     voltReadingCount = 0;
     voltReadingTotal = 0;
