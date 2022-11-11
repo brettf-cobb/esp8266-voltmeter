@@ -72,10 +72,7 @@ void getVoltageReadings() {
   Serial.println(voltageForIteration);
 
   voltageForIteration=(float)voltageForIteration/1024 * 3.300;
-  float factor = 5.042;
-  if (voltageForIteration < 2.25) {
-    factor = 5.089;
-  }
+  float factor = 4.99082;
 
   voltReadingCount = voltReadingCount + 1;
   voltReadingTotal = voltReadingTotal + (float)(voltageForIteration * factor);
