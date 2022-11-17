@@ -43,7 +43,8 @@ unsigned int voltReadingCount = 0; // Stores number of times voltage was added t
 float voltReadingTotal = 0; // Stores the voltReadingTotal for use in average calculation
 float currentVoltage = 0;
 
-const long interval = 5000;        // Interval at which to publish sensor readings
+const long interval = 60000;
+const long voltageReadingInterval = 14000;
 const int voltageReadingsPerLoop = 20;
 
 void getVoltageReadings() {
@@ -52,8 +53,9 @@ void getVoltageReadings() {
   float rawVoltageReadings[20] = {};
   /////////////////////////////////////Battery Voltage//////////////////////////////////  
   for(unsigned int i=0;i<voltageReadingsPerLoop;i++){
-    rawVoltageReadings[i] = analogRead(A0);         //Read analog Voltage
-    delay(5);                                       //ADC stable
+    float analogInput = analogRead(A0);
+    rawVoltageReadings[i] = analogInput;         //Read analog Voltage
+    delay(10);                                    //ADC stable
   }
 
   // Sort Ascending
@@ -68,17 +70,12 @@ void getVoltageReadings() {
   }
   
   voltageForIteration=(float)rawValue/valueCount;
-  Serial.println("voltageForIteration before calculation");
-  Serial.println(voltageForIteration);
-
-  voltageForIteration=(float)voltageForIteration/1024 * 3.300;
-  float factor = 4.99082;
+  voltageForIteration=(float)voltageForIteration/1024 * 3.30;
+  float factor = 4.89651;
 
   voltReadingCount = voltReadingCount + 1;
   voltReadingTotal = voltReadingTotal + (float)(voltageForIteration * factor);
   currentVoltage = voltReadingTotal / voltReadingCount;
-  Serial.println(currentVoltage);
-
 }
 
 void quickSort(float output[], int lowerIndex, int higherIndex) {
@@ -170,8 +167,8 @@ void setup() {
 void loop() {
   unsigned long currentMillis = millis();
 
-  // We read the voltage every 500ms of the publish period to get a nice average
-  if (currentMillis - previousVoltMillis >= 500) {
+  // We read the voltage every 10000ms of the publish period to get a nice average
+  if (currentMillis - previousVoltMillis >= voltageReadingInterval) {
     getVoltageReadings();
     previousVoltMillis = currentMillis;
   }
