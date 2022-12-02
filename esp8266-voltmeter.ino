@@ -1,13 +1,13 @@
 /*
   Brett Fernandes, based on
-   
+
       https://RandomNerdTutorials.com/esp8266-nodemcu-mqtt-publish-bme680-arduino/
-  AND 
+  AND
       https://www.engineersgarage.com/nodemcu-battery-voltage-monitor/
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files.
-  
+
   The above copyright notice and this permission notice shall be included in all
   copies or substantial portions of the Software.
 */
@@ -25,10 +25,18 @@
 // #define MQTT_USER
 // #define MQTT_PASS
 
+#include "config12v.h"
+// #include "config24v.h"
+
+// Define the following settings
+// -- MQTT_PUB_VOLT
+// -- VOLTAGE_REFERENCE
+// -- DIVIDER_FACTOR
+
 // Raspberry Pi Mosquitto MQTT Broker
 #define MQTT_HOST IPAddress(192, 168, 68, 102)
 #define MQTT_PORT 1883
-#define MQTT_PUB_VOLT "/esp/voltmeter_12v_01/voltage"
+
 
 AsyncMqttClient mqttClient;
 Ticker mqttReconnectTimer;
@@ -43,19 +51,26 @@ unsigned int voltReadingCount = 0; // Stores number of times voltage was added t
 float voltReadingTotal = 0; // Stores the voltReadingTotal for use in average calculation
 float currentVoltage = 0;
 
-const long interval = 60000;
-const long voltageReadingInterval = 14000;
+const long interval = 6000;
+const long voltageReadingInterval = 1400;
 const int voltageReadingsPerLoop = 20;
 
 void getVoltageReadings() {
   float rawValue=0.0;
   float voltageForIteration = 0;
   float rawVoltageReadings[20] = {};
-  /////////////////////////////////////Battery Voltage//////////////////////////////////  
-  for(unsigned int i=0;i<voltageReadingsPerLoop;i++){
-    float analogInput = analogRead(A0);
-    rawVoltageReadings[i] = analogInput;         //Read analog Voltage
-    delay(10);                                    //ADC stable
+
+  unsigned long lastReading = millis();
+  /////////////////////////////////////Battery Voltage//////////////////////////////////
+  unsigned int i = 0;
+  while (i < voltageReadingsPerLoop) {
+    unsigned long currentMillis = millis();
+    if (currentMillis - lastReading >= 10) {
+      float analogInput = analogRead(A0);
+      rawVoltageReadings[i] = analogInput;
+      lastReading = currentMillis;
+      i += 1;
+    }
   }
 
   // Sort Ascending
@@ -68,10 +83,10 @@ void getVoltageReadings() {
     rawValue=rawValue + rawVoltageReadings[i];
     valueCount=valueCount+1;
   }
-  
-  voltageForIteration=(float)rawValue/valueCount;
-  voltageForIteration=(float)voltageForIteration/1024 * 3.30;
-  float factor = 4.89651;
+
+  voltageForIteration=rawValue/(float)valueCount;
+  voltageForIteration=(float)voltageForIteration/1023 * VOLTAGE_REFERENCE;
+  float factor = DIVIDER_FACTOR;
 
   voltReadingCount = voltReadingCount + 1;
   voltReadingTotal = voltReadingTotal + (float)(voltageForIteration * factor);
@@ -151,10 +166,10 @@ void onMqttPublish(uint16_t packetId) {
 void setup() {
   Serial.begin(9600);
   Serial.println();
-  
+
   wifiConnectHandler = WiFi.onStationModeGotIP(onWifiConnect);
   wifiDisconnectHandler = WiFi.onStationModeDisconnected(onWifiDisconnect);
-  
+
   mqttClient.onConnect(onMqttConnect);
   mqttClient.onDisconnect(onMqttDisconnect);
   mqttClient.onPublish(onMqttPublish);
@@ -172,8 +187,8 @@ void loop() {
     getVoltageReadings();
     previousVoltMillis = currentMillis;
   }
-  
-  // Every X number of seconds (interval = 10 seconds) 
+
+  // Every X number of seconds (interval = 10 seconds)
   // it publishes a new MQTT message
   if (currentMillis - previousMillis >= interval) {
     // Save the last time a new reading was published
@@ -184,7 +199,7 @@ void loop() {
     voltReadingTotal = 0;
 
     Serial.println(currentVoltage);
-    
+
     uint16_t packetIdPub1 = mqttClient.publish(MQTT_PUB_VOLT, 1, true, String(currentVoltage).c_str());
     Serial.println("Published");
   }
