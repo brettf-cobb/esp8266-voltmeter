@@ -19,24 +19,30 @@
 #include <SPI.h>
 
 #include "arduino_secrets.h"
-// Define these in arduino_secrets.h:
-// #define WIFI_SSID
-// #define WIFI_PASSWORD
-// #define MQTT_USER
-// #define MQTT_PASS
+// -- Define these in arduino_secrets.h:
+// WIFI_SSID
+// WIFI_PASSWORD
+// MQTT_USER
+// MQTT_PASS
 
-#include "config12v.h"
-// #include "config24v.h"
 
-// Define the following settings
-// -- MQTT_PUB_VOLT
-// -- VOLTAGE_REFERENCE
-// -- DIVIDER_FACTOR
+// #include "config12v.h"
+#include "config24v.h"
+// -- Define the following settings
+// MQTT_PUB_VOLT
+//    The mqtt topic to publish to
+// VOLTAGE_REFERENCE
+//    Internal voltage reference for ADC
+//    Calculated by applying the input voltage (as read by a multimeter) (V), and the read ADC value for this voltage (ADC) in the following formula:
+//      VOLTAGE_REFERENCE = ADC / (1023 * V)
+// DIVIDER_FACTOR
+//     The input (VIN) to output (VOUT) ratio of the voltage divider circuit
+//     DIVIDER_FACTOR = VIN / VOUT
 
-// Raspberry Pi Mosquitto MQTT Broker
+
+// MQTT Broker
 #define MQTT_HOST IPAddress(192, 168, 68, 102)
 #define MQTT_PORT 1883
-
 
 AsyncMqttClient mqttClient;
 Ticker mqttReconnectTimer;
@@ -46,14 +52,14 @@ WiFiEventHandler wifiDisconnectHandler;
 Ticker wifiReconnectTimer;
 
 unsigned long previousMillis = 0;   // Stores last publish
-unsigned long previousVoltMillis = 0; // Stores last voltage update
+unsigned long previousVoltMillis = 0; // Stores last voltage update time
 unsigned int voltReadingCount = 0; // Stores number of times voltage was added to voltReadingTotal since update
 float voltReadingTotal = 0; // Stores the voltReadingTotal for use in average calculation
 float currentVoltage = 0;
 
-const long interval = 6000;
-const long voltageReadingInterval = 1400;
-const int voltageReadingsPerLoop = 20;
+const long interval = 60000; // Publish frequency
+const long voltageReadingInterval = 14000; // voltage reading frequency
+const int voltageReadingsPerLoop = 20; // amount of ADC readings to use per voltage reading
 
 void getVoltageReadings() {
   float rawValue=0.0;
@@ -61,11 +67,11 @@ void getVoltageReadings() {
   float rawVoltageReadings[20] = {};
 
   unsigned long lastReading = millis();
-  /////////////////////////////////////Battery Voltage//////////////////////////////////
+
   unsigned int i = 0;
   while (i < voltageReadingsPerLoop) {
     unsigned long currentMillis = millis();
-    if (currentMillis - lastReading >= 10) {
+    if (currentMillis - lastReading >= 10) { //No delay() to prevent inaccurate readings
       float analogInput = analogRead(A0);
       rawVoltageReadings[i] = analogInput;
       lastReading = currentMillis;
@@ -77,7 +83,7 @@ void getVoltageReadings() {
   quickSort(rawVoltageReadings, 0, voltageReadingsPerLoop - 1);
 
   unsigned int valueCount = 0;
-  // split readings into n chuncks and use innermost chunck values for calculation
+  // split readings into n chuncks and use innermost chunck values for calculation (median)
   unsigned int chunkSize = voltageReadingsPerLoop/5;
   for (unsigned int i=(chunkSize * 3) - 1; i < (chunkSize*4)-1; i++) {
     rawValue=rawValue + rawVoltageReadings[i];
@@ -91,35 +97,6 @@ void getVoltageReadings() {
   voltReadingCount = voltReadingCount + 1;
   voltReadingTotal = voltReadingTotal + (float)(voltageForIteration * factor);
   currentVoltage = voltReadingTotal / voltReadingCount;
-}
-
-void quickSort(float output[], int lowerIndex, int higherIndex) {
- int i = lowerIndex;
- int j = higherIndex;
- int pivot = output[lowerIndex + (higherIndex - lowerIndex) / 2];
- while (i <= j) {
-   while (output[i] < pivot) {
-     i++;
-   }
-   while (output[j] > pivot) {
-     j--;
-   }
-   if (i <= j) {
-     exchangeNumbers(output, i, j);
-     i++;
-     j--;
-   }
- }
- if (lowerIndex < j)
-   quickSort(output, lowerIndex, j);
- if (i < higherIndex)
-   quickSort(output, i, higherIndex);
-}
-
-void exchangeNumbers(float output[], int i, int j) {
- int temp = output[i];
- output[i] = output[j];
- output[j] = temp;
 }
 
 void connectToWifi() {
@@ -182,14 +159,14 @@ void setup() {
 void loop() {
   unsigned long currentMillis = millis();
 
-  // We read the voltage every 10000ms of the publish period to get a nice average
+  // every X number of milliseconds, read the voltage and average it into all voltage readings between publishes
   if (currentMillis - previousVoltMillis >= voltageReadingInterval) {
     getVoltageReadings();
+    // save the last time a voltage reading was taken
     previousVoltMillis = currentMillis;
   }
 
-  // Every X number of seconds (interval = 10 seconds)
-  // it publishes a new MQTT message
+  // Every X number of milliseconds, publish a new MQTT message
   if (currentMillis - previousMillis >= interval) {
     // Save the last time a new reading was published
     previousMillis = currentMillis;
@@ -199,8 +176,35 @@ void loop() {
     voltReadingTotal = 0;
 
     Serial.println(currentVoltage);
-
-    uint16_t packetIdPub1 = mqttClient.publish(MQTT_PUB_VOLT, 1, true, String(currentVoltage).c_str());
-    Serial.println("Published");
+    mqttClient.publish(MQTT_PUB_VOLT, 1, true, String(currentVoltage).c_str());
   }
+}
+
+void quickSort(float output[], int lowerIndex, int higherIndex) {
+ int i = lowerIndex;
+ int j = higherIndex;
+ int pivot = output[lowerIndex + (higherIndex - lowerIndex) / 2];
+ while (i <= j) {
+   while (output[i] < pivot) {
+     i++;
+   }
+   while (output[j] > pivot) {
+     j--;
+   }
+   if (i <= j) {
+     exchangeNumbers(output, i, j);
+     i++;
+     j--;
+   }
+ }
+ if (lowerIndex < j)
+   quickSort(output, lowerIndex, j);
+ if (i < higherIndex)
+   quickSort(output, i, higherIndex);
+}
+
+void exchangeNumbers(float output[], int i, int j) {
+ int temp = output[i];
+ output[i] = output[j];
+ output[j] = temp;
 }
